@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>物流追踪数据分析看板</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<style>
+:root{--bg-primary:#fff;--bg-secondary:#f7f8fa;--bg-tertiary:#eef0f3;--text-primary:#1a1a2e;--text-secondary:#6b7280;--text-tertiary:#9ca3af;--border:#e5e7eb;--border-strong:#d1d5db;--accent:#3b82f6;--accent-light:#dbeafe;--success:#10b981;--success-light:#d1fae5;--warning:#f59e0b;--warning-light:#fef3c7;--danger:#ef4444;--danger-light:#fee2e2;--radius:8px;--radius-lg:12px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg-secondary);color:var(--text-primary);font-size:14px;line-height:1.6}
+.header{background:var(--bg-primary);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.header h1{font-size:18px;font-weight:600}
+.header-meta{font-size:12px;color:var(--text-secondary)}
+.btn{padding:6px 16px;border-radius:var(--radius);border:1px solid var(--border-strong);background:var(--bg-primary);cursor:pointer;font-size:13px;transition:all .15s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{background:#2563eb;color:#fff}
+.filters{background:var(--bg-primary);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;position:sticky;top:53px;z-index:99}
+.filter-group{display:flex;align-items:center;gap:4px}
+.filter-label{font-size:12px;color:var(--text-secondary);white-space:nowrap}
+.ms-wrapper{position:relative;display:inline-block}
+.ms-trigger{padding:4px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg-primary);cursor:pointer;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis;min-width:60px}
+.ms-trigger:hover{border-color:var(--accent)}
+.ms-trigger.active{border-color:var(--accent);background:var(--accent-light);color:var(--accent)}
+.ms-panel{position:absolute;top:calc(100% + 2px);left:0;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);max-height:350px;z-index:300;min-width:220px;padding:4px;display:none}
+.ms-panel.open{display:block}
+.ms-actions{padding:4px 8px;border-bottom:1px solid var(--border);margin-bottom:4px;position:sticky;top:0;background:var(--bg-primary);z-index:1}
+.ms-actions label{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:500}
+.ms-list{max-height:280px;overflow-y:auto}
+.ms-list label{display:flex;align-items:center;gap:6px;padding:4px 8px;cursor:pointer;border-radius:4px;font-size:13px;white-space:nowrap}
+.ms-list label:hover{background:var(--bg-secondary)}
+.ms-list input[type=checkbox]{cursor:pointer}
+.main{padding:20px 24px;max-width:1400px;margin:0 auto}
+.metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.metric-card{background:var(--bg-primary);border-radius:var(--radius);padding:20px;border:1px solid var(--border)}
+.metric-label{font-size:12px;color:var(--text-secondary);margin-bottom:8px}
+.metric-value{font-size:28px;font-weight:600}
+.metric-sub{font-size:12px;color:var(--text-tertiary);margin-top:4px}
+.metric-value.good{color:var(--success)}.metric-value.warn{color:var(--warning)}.metric-value.bad{color:var(--danger)}
+.chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:24px}
+.chart-card{background:var(--bg-primary);border-radius:var(--radius);padding:20px;border:1px solid var(--border)}
+.chart-card.full{grid-column:1/-1}
+.chart-title{font-size:14px;font-weight:500;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
+.chart-title span{font-size:12px;color:var(--text-secondary);font-weight:400}
+.chart-container{position:relative;width:100%}
+.chart-container.h300{height:300px}.chart-container.h400{height:400px}.chart-container.h500{height:500px}.chart-container.h600{height:600px}
+.tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;flex-wrap:wrap}
+.tab{padding:10px 18px;cursor:pointer;font-size:14px;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:500}
+.tab:hover{color:var(--accent)}
+.tab-content{display:none}.tab-content.active{display:block}
+.table-wrap{background:var(--bg-primary);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;margin-bottom:24px}
+.table-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.table-search{padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:240px;outline:none}
+.table-search:focus{border-color:var(--accent)}
+.data-table{width:100%;border-collapse:collapse;font-size:12px}
+.data-table th{background:var(--bg-tertiary);padding:10px 12px;text-align:left;font-weight:500;color:var(--text-secondary);position:sticky;top:0;white-space:nowrap;border-bottom:1px solid var(--border)}
+.data-table td{padding:8px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
+.data-table tr:hover{background:var(--bg-secondary)}
+.data-table .num{text-align:right;font-variant-numeric:tabular-nums}
+.status-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500}
+.status-arrived{background:var(--success-light);color:#065f46}
+.status-transit{background:var(--accent-light);color:#1e40af}
+.status-delayed{background:var(--danger-light);color:#991b1b}
+.table-scroll{max-height:600px;overflow:auto}
+.loading-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;z-index:9999;font-size:16px;color:var(--accent)}
+.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hidden{display:none!important}
+.upload-view{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;padding:24px}
+.upload-zone{background:var(--bg-primary);border:2px dashed var(--border-strong);border-radius:var(--radius-lg);padding:48px 40px;text-align:center;cursor:pointer;transition:all .2s;max-width:560px;width:100%}
+.upload-zone:hover{border-color:var(--accent);background:var(--accent-light)}
+.upload-zone.dragover{border-color:var(--accent);background:var(--accent-light);transform:scale(1.01)}
+.upload-icon{font-size:48px;margin-bottom:12px}
+.upload-title{font-size:18px;font-weight:500;margin-bottom:6px}
+.upload-hint{font-size:13px;color:var(--text-secondary);margin-bottom:16px}
+.upload-btn{display:inline-block;padding:10px 24px;background:var(--accent);color:#fff;border-radius:var(--radius);font-size:14px;cursor:pointer;border:none;transition:all .15s}
+.upload-btn:hover{background:#2563eb}
+.error-box{background:var(--danger-light);border:1px solid var(--danger);border-radius:var(--radius);padding:12px 16px;margin:12px 0;max-width:560px;font-size:13px;color:#991b1b;word-break:break-all;width:100%}
+.success-box{background:var(--success-light);border:1px solid var(--success);border-radius:var(--radius);padding:12px 16px;margin:12px 0;max-width:560px;font-size:13px;color:#065f46;width:100%}
+@media(max-width:900px){.chart-grid{grid-template-columns:1fr}.filters{flex-direction:column;align-items:flex-start}}
+</style>
+</head>
+<body>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="spinner"></div>
+  <span id="loadingText">正在加载数据...</span>
+</div>
+
+<!-- Upload View -->
+<div id="uploadView" class="upload-view hidden">
+  <h2 style="margin-bottom:8px;">物流追踪数据分析看板</h2>
+  <p style="color:var(--text-secondary);margin-bottom:24px;">上传 Tracking Report (.xls / .xlsx) 文件即可自动分析</p>
+  <div id="uploadMsg"></div>
+  <div class="upload-zone" id="uploadZone">
+    <div class="upload-icon">📊</div>
+    <div class="upload-title">点击此处选择文件，或拖拽文件到此区域</div>
+    <div class="upload-hint">支持 .xls / .xlsx 格式 · 文件在本地浏览器解析，不会上传到服务器</div>
+    <button class="upload-btn" id="chooseFileBtn" style="margin-top:8px;">选择文件</button>
+    <input type="file" id="fileInput" accept=".xls,.xlsx" style="display:none;">
+  </div>
+</div>
+
+<!-- Dashboard View -->
+<div id="dashboardView" class="hidden">
+  <div class="header">
+    <div>
+      <h1>物流追踪数据分析看板</h1>
+      <span class="header-meta" id="dataInfo"></span>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn" id="refreshDataBtn" title="从服务器刷新最新数据">刷新数据</button>
+      <button class="btn btn-primary" id="uploadNewBtn">上传新报表</button>
+      <input type="file" id="fileInput2" accept=".xls,.xlsx" style="display:none;">
+    </div>
+  </div>
+  <div class="filters" id="filtersBar">
+    <div class="filter-group"><span class="filter-label">ETD周</span>
+      <div class="ms-wrapper" id="fms_week"><div class="ms-trigger">全部</div><div class="ms-panel"><div class="ms-actions"><label><input type="checkbox" class="ms-all-cb" checked> 全选</label></div><div class="ms-list"></div></div></div>
+    </div>
+    <div class="filter-group"><span class="filter-label">市场</span>
+      <div class="ms-wrapper" id="fms_market"><div class="ms-trigger">全部</div><div class="ms-panel"><div class="ms-actions"><label><input type="checkbox" class="ms-all-cb" checked> 全选</label></div><div class="ms-list"></div></div></div>
+    </div>
+    <div class="filter-group"><span class="filter-label">船公司</span>
+      <div class="ms-wrapper" id="fms_carrier"><div class="ms-trigger">全部</div><div class="ms-panel"><div class="ms-actions"><label><input type="checkbox" class="ms-all-cb" checked> 全选</label></div><div class="ms-list"></div></div></div>
+    </div>
+    <div class="filter-group"><span class="filter-label">出发港</span>
+      <div class="ms-wrapper" id="fms_pol"><div class="ms-trigger">全部</div><div class="ms-panel"><div class="ms-actions"><label><input type="checkbox" class="ms-all-cb" checked> 全选</label></div><div class="ms-list"></div></div></div>
+    </div>
+    <div class="filter-group"><span class="filter-label">航区</span>
+      <div class="ms-wrapper" id="fms_continent"><div class="ms-trigger">全部</div><div class="ms-panel"><div class="ms-actions"><label><input type="checkbox" class="ms-all-cb" checked> 全选</label></div><div class="ms-list"></div></div></div>
+    </div>
+    <div class="filter-group"><span class="filter-label">箱型</span>
+      <div class="ms-wrapper" id="fms_cntrsize"><div class="ms-trigger">全部</div><div class="ms-panel"><div class="ms-actions"><label><input type="checkbox" class="ms-all-cb" checked> 全选</label></div><div class="ms-list"></div></div></div>
+    </div>
+    <div class="filter-group"><span class="filter-label">运输状态</span>
+      <div class="ms-wrapper" id="fms_status"><div class="ms-trigger">全部</div><div class="ms-panel"><div class="ms-actions"><label><input type="checkbox" class="ms-all-cb" checked> 全选</label></div><div class="ms-list"></div></div></div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="tabs">
+      <div class="tab active" data-tab="overview">总览</div>
+      <div class="tab" data-tab="timeliness">时效分析</div>
+      <div class="tab" data-tab="carrier">船公司分布</div>
+      <div class="tab" data-tab="volume">柜量分析</div>
+      <div class="tab" data-tab="cntrsize">箱型分析</div>
+      <div class="tab" data-tab="transit">海运时间</div>
+      <div class="tab" data-tab="delay">延误分析</div>
+      <div class="tab" data-tab="data">明细数据</div>
+    </div>
+    <div class="tab-content active" id="tab-overview">
+      <div class="metrics-grid" id="overviewMetrics"></div>
+      <div class="chart-grid"><div class="chart-card full"><div class="chart-title">周度柜量趋势 <span>按 ETD 所在周</span></div><div class="chart-container h400"><canvas id="chartWeeklyVolume"></canvas></div></div></div>
+      <div class="chart-grid">
+        <div class="chart-card"><div class="chart-title">目的国分布 (Top 15) <span>按柜量</span></div><div class="chart-container h400"><canvas id="chartMarketDist"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">航区分布 <span>按柜量</span></div><div class="chart-container h400"><canvas id="chartContinentDist"></canvas></div></div>
+      </div>
+    </div>
+    <div class="tab-content" id="tab-timeliness">
+      <div class="metrics-grid" id="timelinessMetrics"></div>
+      <div class="chart-grid"><div class="chart-card full"><div class="chart-title">周度准班率趋势 <span>ATA ≤ 原始ETA 视为准班</span></div><div class="chart-container h400"><canvas id="chartWeeklyOnTime"></canvas></div></div></div>
+      <div class="chart-grid">
+        <div class="chart-card"><div class="chart-title">延误天数分布 <span>已到港货物 · 含占比</span></div><div class="chart-container h400"><canvas id="chartDelayDist"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">各目的国准班率 (Top 15) <span>按柜量降序</span></div><div class="chart-container h400"><canvas id="chartMarketOnTime"></canvas></div></div>
+      </div>
+    </div>
+    <div class="tab-content" id="tab-carrier">
+      <div class="chart-grid">
+        <div class="chart-card"><div class="chart-title">船公司柜量分布 <span>按柜量降序</span></div><div class="chart-container h500"><canvas id="chartCarrierVolume"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">船公司准班率对比 <span>已到港 (≥5柜)</span></div><div class="chart-container h500"><canvas id="chartCarrierOnTime"></canvas></div></div>
+      </div>
+      <div class="chart-grid"><div class="chart-card full"><div class="chart-title">船公司 × 目的国 交叉分析 <span>各船司在各市场的柜量</span></div><div class="chart-container h500"><canvas id="chartCarrierMarket"></canvas></div></div></div>
+    </div>
+    <div class="tab-content" id="tab-volume">
+      <div class="chart-grid"><div class="chart-card full"><div class="chart-title">周度柜量趋势 (按目的国) <span>Top 10 目的国</span></div><div class="chart-container h500"><canvas id="chartWeeklyVolumeByMarket"></canvas></div></div></div>
+      <div class="chart-grid">
+        <div class="chart-card"><div class="chart-title">各出发港柜量分布</div><div class="chart-container h400"><canvas id="chartPOLVolume"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">目的国柜量排行 (Top 20)</div><div class="chart-container h500"><canvas id="chartMarketVolume"></canvas></div></div>
+      </div>
+    </div>
+    <div class="tab-content" id="tab-cntrsize">
+      <div class="metrics-grid" id="cntrSizeMetrics"></div>
+      <div class="chart-grid">
+        <div class="chart-card"><div class="chart-title">箱型分布 <span>按柜量</span></div><div class="chart-container h400"><canvas id="chartCntrSizeDist"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">箱型 × 目的国 (Top 10) <span>堆叠柱状图</span></div><div class="chart-container h500"><canvas id="chartCntrSizeMarket"></canvas></div></div>
+      </div>
+      <div class="chart-grid"><div class="chart-card full"><div class="chart-title">各箱型周度柜量趋势</div><div class="chart-container h400"><canvas id="chartCntrSizeWeekly"></canvas></div></div></div>
+    </div>
+    <div class="tab-content" id="tab-transit">
+      <div class="metrics-grid" id="transitMetrics"></div>
+      <div class="chart-grid"><div class="chart-card full"><div class="chart-title">各目的国海运时间对比 <span>平均/中位数 (POL ETD → ATA)</span></div><div class="chart-container h500"><canvas id="chartTransitByMarket"></canvas></div></div></div>
+      <div class="chart-grid">
+        <div class="chart-card"><div class="chart-title">海运时间分布 <span>已到港货物</span></div><div class="chart-container h400"><canvas id="chartTransitDist"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">各船公司平均海运时间 <span>≥5柜</span></div><div class="chart-container h500"><canvas id="chartTransitByCarrier"></canvas></div></div>
+      </div>
+    </div>
+    <!-- Delay Analysis Tab -->
+    <div class="tab-content" id="tab-delay">
+      <div class="metrics-grid" id="delayMetrics"></div>
+      <div class="chart-grid"><div class="chart-card full"><div class="chart-title">船公司延误排行 <span>柜量 & 延误柜占比</span></div><div class="chart-container h500"><canvas id="chartCarrierDelayRank"></canvas></div></div></div>
+      <div class="chart-grid"><div class="chart-card full"><div class="chart-title">船公司准班率排行 <span>按准班率降序</span></div><div class="chart-container h500"><canvas id="chartCarrierOnTimeRank"></canvas></div></div></div>
+      <div class="chart-grid"><div class="chart-card full"><div class="chart-title">船公司周度平均延误 <span>按 ETD 周 · 每家船公司一条线</span></div><div class="chart-container h500"><canvas id="chartCarrierWeeklyDelay"></canvas></div></div></div>
+      <div class="chart-grid"><div class="chart-card full">
+        <div class="chart-title">船公司延误明细表</div>
+        <div class="table-scroll" style="max-height:500px;">
+          <table class="data-table" id="carrierDelayTable">
+            <thead style="position:sticky;top:0;background:#f8fafc;z-index:10;">
+              <tr>
+                <th style="cursor:pointer;" onclick="sortCarrierDelay('carrier')">船公司 ↕</th>
+                <th style="cursor:pointer;" onclick="sortCarrierDelay('total')">柜量 ↕</th>
+                <th style="cursor:pointer;" onclick="sortCarrierDelay('arrived')">已到港 ↕</th>
+                <th style="cursor:pointer;" onclick="sortCarrierDelay('delayed')">延误柜数 ↕</th>
+                <th style="cursor:pointer;" onclick="sortCarrierDelay('delayPct')">延误占比 ↕</th>
+                <th style="cursor:pointer;" onclick="sortCarrierDelay('avgDelay')">平均延误(天) ↕</th>
+                <th style="cursor:pointer;" onclick="sortCarrierDelay('onTimeRate')">准班率 ↕</th>
+                <th style="cursor:pointer;" onclick="sortCarrierDelay('maxDelay')">最大延误(天) ↕</th>
+                <th style="cursor:pointer;" onclick="sortCarrierDelay('delayBuckets')">延误分布 ↕</th>
+              </tr>
+            </thead>
+            <tbody id="carrierDelayBody"></tbody>
+          </table>
+        </div>
+      </div></div>
+    </div>
+    <div class="tab-content" id="tab-data">
+      <div class="table-wrap">
+        <div class="table-header">
+          <span id="tableCount" style="font-weight:500;">明细数据</span>
+          <input type="text" class="table-search" id="tableSearch" placeholder="搜索提单号/柜号/船公司...">
+        </div>
+        <div class="table-scroll">
+          <table class="data-table" id="dataTable"><thead id="tableHead"></thead><tbody id="tableBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DATA: country code -> Chinese name, continent, carrier names
+// ============================================================
+var COUNTRY_CN={"AD":"安道尔","AE":"阿联酋","AF":"阿富汗","AG":"安提瓜和巴布达","AI":"安圭拉","AL":"阿尔巴尼亚","AM":"亚美尼亚","AO":"安哥拉","AR":"阿根廷","AT":"奥地利","AU":"澳大利亚","AW":"阿鲁巴","AZ":"阿塞拜疆","BA":"波黑","BB":"巴巴多斯","BD":"孟加拉国","BE":"比利时","BF":"布基纳法索","BG":"保加利亚","BH":"巴林","BI":"布隆迪","BJ":"贝宁","BM":"百慕大","BN":"文莱","BO":"玻利维亚","BR":"巴西","BS":"巴哈马","BT":"不丹","BW":"博茨瓦纳","BY":"白俄罗斯","BZ":"伯利兹","CA":"加拿大","CD":"刚果(金)","CF":"中非","CG":"刚果(布)","CH":"瑞士","CI":"科特迪瓦","CK":"库克群岛","CL":"智利","CM":"喀麦隆","CN":"中国","CO":"哥伦比亚","CR":"哥斯达黎加","CU":"古巴","CV":"佛得角","CY":"塞浦路斯","CZ":"捷克","DE":"德国","DJ":"吉布提","DK":"丹麦","DO":"多米尼加","DZ":"阿尔及利亚","EC":"厄瓜多尔","EE":"爱沙尼亚","EG":"埃及","ER":"厄立特里亚","ES":"西班牙","ET":"埃塞俄比亚","FI":"芬兰","FJ":"斐济","FR":"法国","GA":"加蓬","GB":"英国","GD":"格林纳达","GE":"格鲁吉亚","GH":"加纳","GM":"冈比亚","GN":"几内亚","GR":"希腊","GT":"危地马拉","GW":"几内亚比绍","GY":"圭亚那","HK":"中国香港","HN":"洪都拉斯","HR":"克罗地亚","HT":"海地","HU":"匈牙利","ID":"印度尼西亚","IE":"爱尔兰","IL":"以色列","IN":"印度","IQ":"伊拉克","IR":"伊朗","IS":"冰岛","IT":"意大利","JM":"牙买加","JO":"约旦","JP":"日本","KE":"肯尼亚","KG":"吉尔吉斯斯坦","KH":"柬埔寨","KI":"基里巴斯","KM":"科摩罗","KN":"圣基茨和尼维斯","KP":"朝鲜","KR":"韩国","KW":"科威特","KY":"开曼群岛","KZ":"哈萨克斯坦","LA":"老挝","LB":"黎巴嫩","LC":"圣卢西亚","LI":"列支敦士登","LK":"斯里兰卡","LR":"利比里亚","LS":"莱索托","LT":"立陶宛","LU":"卢森堡","LV":"拉脱维亚","LY":"利比亚","MA":"摩洛哥","MD":"摩尔多瓦","ME":"黑山","MG":"马达加斯加","MK":"北马其顿","ML":"马里","MM":"缅甸","MN":"蒙古","MO":"中国澳门","MT":"马耳他","MU":"毛里求斯","MV":"马尔代夫","MW":"马拉维","MX":"墨西哥","MY":"马来西亚","MZ":"莫桑比克","NA":"纳米比亚","NE":"尼日尔","NG":"尼日利亚","NI":"尼加拉瓜","NL":"荷兰","NO":"挪威","NP":"尼泊尔","NZ":"新西兰","OM":"阿曼","PA":"巴拿马","PE":"秘鲁","PG":"巴布亚新几内亚","PH":"菲律宾","PK":"巴基斯坦","PL":"波兰","PR":"波多黎各","PT":"葡萄牙","PY":"巴拉圭","QA":"卡塔尔","RE":"留尼汪","RO":"罗马尼亚","RS":"塞尔维亚","RU":"俄罗斯","RW":"卢旺达","SA":"沙特阿拉伯","SB":"所罗门群岛","SC":"塞舌尔","SD":"苏丹","SE":"瑞典","SG":"新加坡","SI":"斯洛文尼亚","SK":"斯洛伐克","SL":"塞拉利昂","SN":"塞内加尔","SO":"索马里","SR":"苏里南","SS":"南苏丹","SV":"萨尔瓦多","SY":"叙利亚","SZ":"斯威士兰","TD":"乍得","TG":"多哥","TH":"泰国","TJ":"塔吉克斯坦","TM":"土库曼斯坦","TN":"突尼斯","TO":"汤加","TR":"土耳其","TT":"特立尼达和多巴哥","TW":"中国台湾","TZ":"坦桑尼亚","UA":"乌克兰","UG":"乌干达","US":"美国","UY":"乌拉圭","UZ":"乌兹别克斯坦","VA":"梵蒂冈","VE":"委内瑞拉","VN":"越南","YE":"也门","ZA":"南非","ZM":"赞比亚","ZW":"津巴布韦","UNKNOWN":"未知"};
+var CONTINENT_CN={"Asia":"亚洲","LATAM":"拉丁美洲","NA":"北美","EU":"欧洲","AFR":"非洲","Oceania":"大洋洲","":"未知"};
+var CARRIER_FULL={"MAERSK":"马士基","CMA":"达飞","OOCL":"东方海外","MSC":"地中海航运","CNC":"正利","TSL":"TSL","ONE":"海洋网联","COSCO":"中远海","CUL":"中外运","EMC":"长荣","WANHAI":"万海","SITC":"海丰","HPL":"赫伯罗特","HMM":"现代商船","YML":"阳明","KMTC":"高丽","ESL":"阿联酋航运","ZIM":"以星","PIL":"太平船务","VOLTA":"VOLTA","GOLD STAR":"金星","RCL":"宏海箱运","SM LINE":"SM LINE","USL":"USL","JINJIANG":"锦江","HARBOUR":"HARBOUR","SINOKOR":"长锦","FESCO":"远东航运","CXL":"CXL","SINOTRANS":"中外运","HEUNG-A":"兴亚","NAMSUNG":"南星"};
+var CHART_COLORS=['#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316','#6366f1','#14b8a6','#e879f9','#a3e635','#fb7185','#38bdf8','#facc15','#c084fc','#4ade80','#fbbf24','#fb923c','#a78bfa','#34d399','#fde047','#fca5a5','#7dd3fc','#d9f99d','#fdba74','#ddd6fe','#bfdbfe','#fecaca'];
+
+// ============================================================
+// STATE
+// ============================================================
+var rawData=[], filteredData=[], charts={};
+var msInstances={};
+
+// ============================================================
+// INIT - try fetch JSON first, fallback to upload
+// ============================================================
+function init(){
+  showLoading('正在加载数据...');
+  fetch('logistics_data.json?_t='+Date.now())
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(data){
+      console.log('JSON loaded:', data.length, 'records');
+      rawData=data; showDashboard();
+    })
+    .catch(function(err){
+      console.log('JSON fetch failed:', err.message);
+      showUploadView();
+    });
+}
+
+function saveDataToServer(){
+  console.log('GitHub Pages mode: data saved locally only');
+}
+
+function showLoading(msg){
+  document.getElementById('loadingOverlay').classList.remove('hidden');
+  document.getElementById('loadingText').textContent=msg;
+}
+function hideLoading(){ document.getElementById('loadingOverlay').classList.add('hidden'); }
+
+function showUploadView(){
+  hideLoading();
+  document.getElementById('uploadView').classList.remove('hidden');
+  document.getElementById('dashboardView').classList.add('hidden');
+}
+
+function showDashboard(){
+  hideLoading();
+  document.getElementById('uploadView').classList.add('hidden');
+  document.getElementById('dashboardView').classList.remove('hidden');
+  document.getElementById('dataInfo').textContent='共 '+rawData.length+' 条记录 (已去重) | 加载时间: '+new Date().toLocaleTimeString('zh-CN');
+  populateFilters(); applyFilters();
+}
+
+// ============================================================
+// FILE UPLOAD
+// ============================================================
+var uploadZone=document.getElementById('uploadZone');
+var fileInput=document.getElementById('fileInput');
+var chooseFileBtn=document.getElementById('chooseFileBtn');
+var fileInput2=document.getElementById('fileInput2');
+var uploadNewBtn=document.getElementById('uploadNewBtn');
+
+uploadZone.addEventListener('click', function(e){
+  if(e.target===chooseFileBtn) return;
+  e.preventDefault();
+  fileInput.click();
+});
+chooseFileBtn.addEventListener('click', function(e){
+  e.stopPropagation();
+  fileInput.click();
+});
+
+uploadZone.addEventListener('dragover', function(e){ e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', function(){ uploadZone.classList.remove('dragover'); });
+uploadZone.addEventListener('drop', function(e){
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+
+fileInput.addEventListener('change', function(e){
+  if(e.target.files.length) handleFile(e.target.files[0]);
+  e.target.value='';
+});
+
+uploadNewBtn.addEventListener('click', function(){ fileInput2.click(); });
+
+document.getElementById('refreshDataBtn').addEventListener('click', function(){
+  showLoading('正在刷新数据...');
+  location.reload();
+});
+fileInput2.addEventListener('change', function(e){
+  if(e.target.files.length){
+    showLoading('正在解析新报表...');
+    handleFile(e.target.files[0]);
+  }
+  e.target.value='';
+});
+
+function showUploadMsg(msg, type){
+  var box=document.getElementById('uploadMsg');
+  var cls=type==='error'?'error-box':'success-box';
+  box.innerHTML='<div class="'+cls+'">'+msg+'</div>';
+}
+
+function handleFile(file){
+  console.log('File selected:', file.name, file.size, 'bytes', file.type);
+  showLoading('正在解析文件: '+file.name);
+
+  if(typeof XLSX==='undefined'){
+    hideLoading();
+    showUploadMsg('错误: xlsx 库未加载！请刷新页面重试。', 'error');
+    return;
+  }
+
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(e.target.result, {type:'array', cellDates:false});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if(rows.length<2){
+        hideLoading();
+        showUploadMsg('文件无数据或少于2行，请检查文件内容。', 'error');
+        return;
+      }
+      processData(rows);
+    }catch(err){
+      console.error('Parse error:', err);
+      hideLoading();
+      showUploadMsg('文件解析失败: '+err.message, 'error');
+    }
+  };
+  reader.onerror=function(){
+    hideLoading();
+    showUploadMsg('文件读取失败，请重试。', 'error');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ============================================================
+// DATA PROCESSING (with dedup: same cntr + same polAtd = skip)
+// ============================================================
+function excelDateToStr(serial){
+  if(!serial||serial===''||isNaN(serial)) return '';
+  try{
+    var epoch=new Date(Date.UTC(1899,11,30));
+    var d=new Date(epoch.getTime()+Number(serial)*86400000);
+    if(isNaN(d.getTime())) return '';
+    return d.toISOString().slice(0,10);
+  }catch(e){ return ''; }
+}
+
+function getISOWeek(dateStr){
+  if(!dateStr) return '';
+  var d=new Date(dateStr+'T00:00:00Z');
+  if(isNaN(d.getTime())) return '';
+  var day=d.getUTCDay()||7;
+  d.setUTCDate(d.getUTCDate()+4-day);
+  var yearStart=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  var weekNum=Math.ceil((((d-yearStart)/86400000)+1)/7);
+  return d.getUTCFullYear()+'-W'+String(weekNum).padStart(2,'0');
+}
+
+function daysBetween(d1,d2){
+  if(!d1||!d2) return null;
+  var dd1=new Date(d1+'T00:00:00Z'), dd2=new Date(d2+'T00:00:00Z');
+  if(isNaN(dd1.getTime())||isNaN(dd2.getTime())) return null;
+  return Math.round((dd2-dd1)/86400000);
+}
+
+function toInt(val){
+  if(val===''||val===null||val===undefined) return null;
+  var n=parseInt(val);
+  return isNaN(n)?null:n;
+}
+
+function processData(rows){
+  showLoading('正在处理数据...');
+  if(rows.length<2){ hideLoading(); alert('文件无数据'); return; }
+
+  var headers=rows[0].map(function(h){ return String(h).replace(/\xa0/g,' ').trim(); });
+  var colMap={};
+  headers.forEach(function(h,i){
+    var hl=h.toLowerCase();
+    if(hl.indexOf('bkg')>=0||hl.indexOf('bl no')>=0) colMap.bkg=i;
+    else if(h==='Cntr No.') colMap.cntr=i;
+    else if(h==='Carrier') colMap.carrier=i;
+    else if(h==='Cntr Size') colMap.cntrSize=i;
+    else if(hl.indexOf('1st leg')>=0) colMap.vessel=i;
+    else if(h==='POL') colMap.pol=i;
+    else if(hl.indexOf('original etd')>=0&&hl.indexOf('pol')>=0) colMap.origEtd=i;
+    else if(h==='POL ETD') colMap.polEtd=i;
+    else if(hl.indexOf('pol atd')>=0) colMap.polAtd=i;
+    else if(h==='POD') colMap.pod=i;
+    else if(hl.indexOf('original')>=0&&hl.indexOf('eta')>=0&&hl.indexOf('delivery')>=0) colMap.origEta=i;
+    else if(hl.indexOf('updated')>=0&&hl.indexOf('eta')>=0&&hl.indexOf('delivery')>=0) colMap.updEta=i;
+    else if(hl.indexOf('ata')>=0&&hl.indexOf('delivery')>=0&&hl.indexOf('month')<0) colMap.ata=i;
+    else if(h==='Delay') colMap.delay=i;
+    else if(hl.indexOf('original transit')>=0) colMap.origTransit=i;
+    else if(h==='Continents') colMap.continents=i;
+    else if(hl.indexOf('transportation status')>=0) colMap.transStatus=i;
+    else if(h==='Final Destination') colMap.finalDest=i;
+  });
+
+  console.log('Column mapping:', colMap);
+  rawData=[];
+
+  // Dedup: track seen cntr+polAtd combinations
+  var dedupSet={};
+  var dedupSkipped=0;
+
+  function val(row,key){ var idx=colMap[key]; return idx!==undefined?row[idx]:''; }
+
+  for(var r=1;r<rows.length;r++){
+    var row=rows[r];
+    var bkg=String(val(row,'bkg')||'').trim();
+    var cntr=String(val(row,'cntr')||'').trim();
+    if(!bkg&&!cntr) continue;
+
+    var polAtd=excelDateToStr(val(row,'polAtd'));
+
+    // Dedup: same cntr + same polAtd = skip
+    var dedupKey=cntr+'|'+polAtd;
+    if(cntr&&polAtd&&dedupSet[dedupKey]){
+      dedupSkipped++;
+      continue;
+    }
+    if(cntr&&polAtd) dedupSet[dedupKey]=true;
+
+    var carrier=String(val(row,'carrier')||'').trim();
+    var cntrSize=String(val(row,'cntrSize')||'').trim();
+    var vessel=String(val(row,'vessel')||'').trim();
+    var pol=String(val(row,'pol')||'').trim();
+    var pod=String(val(row,'pod')||'').trim();
+
+    var origEtd=excelDateToStr(val(row,'origEtd'));
+    var polEtd=excelDateToStr(val(row,'polEtd'));
+    var origEta=excelDateToStr(val(row,'origEta'));
+    var updEta=excelDateToStr(val(row,'updEta'));
+    var ata=excelDateToStr(val(row,'ata'));
+
+    var finalDest=String(val(row,'finalDest')||'').trim();
+    if(!finalDest) finalDest='UNKNOWN';
+    var countryCN=COUNTRY_CN[finalDest]||finalDest;
+
+    var continents=String(val(row,'continents')||'').trim();
+    var continentCN=CONTINENT_CN[continents]||continents||'未知';
+
+    var transStatus=String(val(row,'transStatus')||'').trim();
+
+    var delay=toInt(val(row,'delay'));
+    if(delay===null&&origEta&&ata) delay=daysBetween(origEta,ata);
+
+    var origTransit=toInt(val(row,'origTransit'));
+    if(origTransit===null) origTransit=daysBetween(origEtd,origEta);
+
+    var actualTransit=daysBetween(polEtd,ata);
+    if(actualTransit===null) actualTransit=daysBetween(polEtd,updEta);
+
+    var status='transit', statusText='在途';
+    if(ata){
+      if(delay!==null&&delay>0){ status='delayed'; statusText='延误到港'; }
+      else{ status='arrived'; statusText='准班到港'; }
+    }else if(transStatus==='Empty Returned'||transStatus==='AT POD'){
+      status='arrived'; statusText='已到港(无ATA)';
+    }
+
+    var week=getISOWeek(polEtd||origEtd);
+    var ataMonth='';
+    if(ata){ var d=new Date(ata+'T00:00:00Z'); ataMonth=d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0'); }
+
+    rawData.push({
+      bkg:bkg, cntr:cntr, carrier:carrier, cntrSize:cntrSize, vessel:vessel,
+      pol:pol, pod:pod, finalDest:finalDest, countryCN:countryCN,
+      marketDisplay:finalDest+' '+countryCN, continents:continents, continentCN:continentCN,
+      transStatus:transStatus, origEtd:origEtd, polEtd:polEtd, polAtd:polAtd,
+      origEta:origEta, updEta:updEta, ata:ata, delay:delay,
+      origTransit:origTransit, actualTransit:actualTransit,
+      status:status, statusText:statusText, week:week, ataMonth:ataMonth
+    });
+  }
+
+  console.log('Processed:', rawData.length, 'records (skipped', dedupSkipped, 'duplicates)');
+  hideLoading();
+  document.getElementById('uploadView').classList.add('hidden');
+  document.getElementById('dashboardView').classList.remove('hidden');
+  document.getElementById('dataInfo').textContent='共 '+rawData.length+' 条记录 (已去重'+dedupSkipped+'条) | 加载时间: '+new Date().toLocaleTimeString('zh-CN');
+  populateFilters(); applyFilters();
+  saveDataToServer();
+}
+
+// ============================================================
+// MULTI-SELECT FILTERS
+// ============================================================
+function buildMultiSelect(wrapperId, options, formatter){
+  var wrapper=document.getElementById(wrapperId);
+  var trigger=wrapper.querySelector('.ms-trigger');
+  var panel=wrapper.querySelector('.ms-panel');
+  var list=wrapper.querySelector('.ms-list');
+  var allCb=wrapper.querySelector('.ms-all-cb');
+
+  list.innerHTML=options.map(function(opt){
+    return '<label><input type="checkbox" value="'+opt+'" checked> '+(formatter?formatter(opt):opt)+'</label>';
+  }).join('');
+
+  trigger.addEventListener('click', function(e){
+    e.stopPropagation();
+    document.querySelectorAll('.ms-panel').forEach(function(p){ if(p!==panel) p.classList.remove('open'); });
+    panel.classList.toggle('open');
+  });
+
+  list.addEventListener('change', function(){
+    var cbs=list.querySelectorAll('input[type=checkbox]');
+    var checked=list.querySelectorAll('input[type=checkbox]:checked');
+    allCb.checked=checked.length===cbs.length;
+    updateTrigger();
+    applyFilters();
+  });
+
+  allCb.addEventListener('change', function(){
+    list.querySelectorAll('input[type=checkbox]').forEach(function(cb){ cb.checked=allCb.checked; });
+    updateTrigger();
+    applyFilters();
+  });
+
+  function updateTrigger(){
+    var cbs=list.querySelectorAll('input[type=checkbox]');
+    var checked=list.querySelectorAll('input[type=checkbox]:checked');
+    if(checked.length===cbs.length||checked.length===0){
+      trigger.textContent='全部';
+      trigger.classList.remove('active');
+      if(checked.length===0){
+        allCb.checked=false;
+      }
+    }else{
+      trigger.textContent='已选 '+checked.length+' 项';
+      trigger.classList.add('active');
+    }
+  }
+
+  wrapper.getSelected=function(){
+    return Array.from(list.querySelectorAll('input[type=checkbox]:checked')).map(function(cb){ return cb.value; });
+  };
+  wrapper.isAllSelected=function(){
+    var cbs=list.querySelectorAll('input[type=checkbox]');
+    var checked=list.querySelectorAll('input[type=checkbox]:checked');
+    return checked.length===cbs.length;
+  };
+
+  msInstances[wrapperId]=wrapper;
+  return wrapper;
+}
+
+// Close panels on outside click
+document.addEventListener('click', function(e){
+  if(!e.target.closest('.ms-wrapper')){
+    document.querySelectorAll('.ms-panel').forEach(function(p){ p.classList.remove('open'); });
+  }
+});
+
+function populateFilters(){
+  var weeks=[],markets=[],carriers=[],pols=[],continents=[],cntrSizes=[],statuses=[];
+  var seen={};
+  rawData.forEach(function(r){
+    if(r.week&&!seen['w'+r.week]){weeks.push(r.week);seen['w'+r.week]=1;}
+    if(!seen['f'+r.finalDest]){markets.push(r.finalDest);seen['f'+r.finalDest]=1;}
+    if(!seen['c'+r.carrier]){carriers.push(r.carrier);seen['c'+r.carrier]=1;}
+    if(!seen['p'+r.pol]){pols.push(r.pol);seen['p'+r.pol]=1;}
+    if(!seen['co'+r.continentCN]){continents.push(r.continentCN);seen['co'+r.continentCN]=1;}
+    if(!seen['s'+r.cntrSize]){cntrSizes.push(r.cntrSize||'(空)');seen['s'+r.cntrSize]=1;}
+    if(!seen['st'+r.transStatus]){statuses.push(r.transStatus||'(空)');seen['st'+r.transStatus]=1;}
+  });
+  weeks.sort(); markets.sort(); carriers.sort(); pols.sort();
+
+  buildMultiSelect('fms_week',weeks);
+  buildMultiSelect('fms_market',markets,function(c){return c+' '+(COUNTRY_CN[c]||c);});
+  buildMultiSelect('fms_carrier',carriers,function(c){return c+(CARRIER_FULL[c]?' ('+CARRIER_FULL[c]+')':'');});
+  buildMultiSelect('fms_pol',pols);
+  buildMultiSelect('fms_continent',continents);
+  buildMultiSelect('fms_cntrsize',cntrSizes);
+  buildMultiSelect('fms_status',statuses);
+}
+
+function applyFilters(){
+  var wSel=msInstances.fms_week.getSelected();
+  var mSel=msInstances.fms_market.getSelected();
+  var cSel=msInstances.fms_carrier.getSelected();
+  var pSel=msInstances.fms_pol.getSelected();
+  var coSel=msInstances.fms_continent.getSelected();
+  var csSel=msInstances.fms_cntrsize.getSelected();
+  var stSel=msInstances.fms_status.getSelected();
+
+  var wAll=msInstances.fms_week.isAllSelected();
+  var mAll=msInstances.fms_market.isAllSelected();
+  var cAll=msInstances.fms_carrier.isAllSelected();
+  var pAll=msInstances.fms_pol.isAllSelected();
+  var coAll=msInstances.fms_continent.isAllSelected();
+  var csAll=msInstances.fms_cntrsize.isAllSelected();
+  var stAll=msInstances.fms_status.isAllSelected();
+
+  filteredData=rawData.filter(function(r){
+    if(!wAll&&wSel.indexOf(r.week)<0) return false;
+    if(!mAll&&mSel.indexOf(r.finalDest)<0) return false;
+    if(!cAll&&cSel.indexOf(r.carrier)<0) return false;
+    if(!pAll&&pSel.indexOf(r.pol)<0) return false;
+    if(!coAll&&coSel.indexOf(r.continentCN)<0) return false;
+    if(!csAll&&csSel.indexOf(r.cntrSize||'(空)')<0) return false;
+    if(!stAll&&stSel.indexOf(r.transStatus||'(空)')<0) return false;
+    return true;
+  });
+  renderAll();
+}
+
+// ============================================================
+// CHART HELPERS
+// ============================================================
+function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
+function makeChart(id,config){
+  destroyChart(id);
+  var ctx=document.getElementById(id);
+  if(!ctx) return;
+  config.options=config.options||{};
+  config.options.responsive=true;
+  config.options.maintainAspectRatio=false;
+  config.options.plugins=config.options.plugins||{};
+  if(!config.options.plugins.legend) config.options.plugins.legend={};
+  if(!config.options.plugins.tooltip) config.options.plugins.tooltip={};
+  config.options.plugins.tooltip.mode='index';
+  config.options.plugins.tooltip.intersect=false;
+  charts[id]=new Chart(ctx,config);
+}
+function groupBy(arr,keyFn){ var m={}; arr.forEach(function(item){ var k=keyFn(item); if(!m[k])m[k]=[]; m[k].push(item); }); return m; }
+function sortDesc(obj){ return Object.entries(obj).sort(function(a,b){return b[1]-a[1];}); }
+
+// ============================================================
+// RENDER
+// ============================================================
+function renderAll(){ renderOverview(); renderTimeliness(); renderCarrier(); renderVolume(); renderCntrSize(); renderTransit(); renderDelay(); renderTable(); }
+
+function renderOverview(){
+  var total=filteredData.length;
+  var arrived=filteredData.filter(function(r){return r.status==='arrived'||r.status==='delayed';});
+  var onTime=filteredData.filter(function(r){return r.status==='arrived';});
+  var onTimeRate=arrived.length>0?(onTime.length/arrived.length*100).toFixed(1):'0.0';
+  var delays=arrived.filter(function(r){return r.delay!==null;}).map(function(r){return r.delay;});
+  var avgDelay=delays.length>0?(delays.reduce(function(a,b){return a+b;},0)/delays.length).toFixed(1):'0.0';
+  var transits=arrived.filter(function(r){return r.actualTransit!==null;}).map(function(r){return r.actualTransit;});
+  var avgTransit=transits.length>0?(transits.reduce(function(a,b){return a+b;},0)/transits.length).toFixed(1):'0.0';
+  var inTransit=filteredData.filter(function(r){return r.status==='transit';}).length;
+
+  document.getElementById('overviewMetrics').innerHTML=
+    '<div class="metric-card"><div class="metric-label">总柜量</div><div class="metric-value">'+total+'</div><div class="metric-sub">已到港 '+arrived.length+' | 在途 '+inTransit+'</div></div>'+
+    '<div class="metric-card"><div class="metric-label">准班率</div><div class="metric-value '+(onTimeRate>=80?'good':onTimeRate>=60?'warn':'bad')+'">'+onTimeRate+'%</div><div class="metric-sub">准班 '+onTime.length+' / 已到港 '+arrived.length+'</div></div>'+
+    '<div class="metric-card"><div class="metric-label">平均延误天数</div><div class="metric-value '+(avgDelay<=2?'good':avgDelay<=7?'warn':'bad')+'">'+avgDelay+'</div><div class="metric-sub">仅统计已到港</div></div>'+
+    '<div class="metric-card"><div class="metric-label">平均海运时间</div><div class="metric-value">'+avgTransit+'</div><div class="metric-sub">天 (POL ETD → ATA)</div></div>';
+
+  var weekData=groupBy(filteredData,function(r){return r.week||'未知';});
+  var weekKeys=Object.keys(weekData).sort();
+  makeChart('chartWeeklyVolume',{type:'line',data:{labels:weekKeys,datasets:[{label:'柜量',data:weekKeys.map(function(w){return weekData[w].length;}),borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',fill:true,tension:0.3}]},options:{scales:{x:{ticks:{maxRotation:45}}}}});
+
+  var marketData={};
+  filteredData.forEach(function(r){marketData[r.marketDisplay]=(marketData[r.marketDisplay]||0)+1;});
+  var topMarkets=sortDesc(marketData).slice(0,15);
+  makeChart('chartMarketDist',{type:'bar',data:{labels:topMarkets.map(function(m){return m[0];}),datasets:[{label:'柜量',data:topMarkets.map(function(m){return m[1];}),backgroundColor:'#3b82f6'}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
+
+  var conData={};
+  filteredData.forEach(function(r){conData[r.continentCN]=(conData[r.continentCN]||0)+1;});
+  var conSorted=sortDesc(conData);
+  makeChart('chartContinentDist',{type:'doughnut',data:{labels:conSorted.map(function(c){return c[0];}),datasets:[{data:conSorted.map(function(c){return c[1];}),backgroundColor:CHART_COLORS}]},options:{plugins:{legend:{position:'right'}}}});
+}
+
+function renderTimeliness(){
+  var arrived=filteredData.filter(function(r){return r.status==='arrived'||r.status==='delayed';});
+  var onTime=filteredData.filter(function(r){return r.status==='arrived';});
+  var delayed=filteredData.filter(function(r){return r.status==='delayed';});
+  var delays=delayed.map(function(r){return r.delay;}).filter(function(d){return d!==null;});
+  var maxDelay=delays.length>0?Math.max.apply(null,delays):0;
+  var avgDelay=delays.length>0?(delays.reduce(function(a,b){return a+b;},0)/delays.length).toFixed(1):'0';
+
+  document.getElementById('timelinessMetrics').innerHTML=
+    '<div class="metric-card"><div class="metric-label">已到港柜量</div><div class="metric-value">'+arrived.length+'</div><div class="metric-sub">准班 '+onTime.length+' | 延误 '+delayed.length+'</div></div>'+
+    '<div class="metric-card"><div class="metric-label">准班率</div><div class="metric-value '+(arrived.length>0&&onTime.length/arrived.length*100>=80?'good':'warn')+'">'+(arrived.length>0?(onTime.length/arrived.length*100).toFixed(1):0)+'%</div></div>'+
+    '<div class="metric-card"><div class="metric-label">最大延误</div><div class="metric-value bad">'+maxDelay+'</div><div class="metric-sub">天</div></div>'+
+    '<div class="metric-card"><div class="metric-label">平均延误(延误柜)</div><div class="metric-value warn">'+avgDelay+'</div><div class="metric-sub">天</div></div>';
+
+  var weekArrived=groupBy(arrived,function(r){return r.week||'未知';});
+  var weekOnTime=groupBy(onTime,function(r){return r.week||'未知';});
+  var weekKeys=Array.from(new Set(Object.keys(weekArrived).concat(Object.keys(weekOnTime)))).sort();
+  makeChart('chartWeeklyOnTime',{type:'line',data:{labels:weekKeys,datasets:[
+    {label:'准班率(%)',data:weekKeys.map(function(w){return weekArrived[w]?Math.round((weekOnTime[w]||[]).length/weekArrived[w].length*100*10)/10:0;}),borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.1)',fill:true,tension:0.3,yAxisID:'y'},
+    {label:'到港柜量',data:weekKeys.map(function(w){return (weekArrived[w]||[]).length;}),borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',tension:0.3,yAxisID:'y1'}
+  ]},options:{scales:{y:{type:'linear',position:'left',max:100,title:{display:true,text:'准班率 (%)'}},y1:{type:'linear',position:'right',title:{display:true,text:'柜量'},grid:{drawOnChartArea:false}},x:{ticks:{maxRotation:45}}}}});
+
+  // Delay distribution with percentage
+  var delayBuckets={'准班(≤0天)':0,'1-3天':0,'4-7天':0,'8-14天':0,'15-30天':0,'>30天':0};
+  arrived.forEach(function(r){if(r.delay===null)return; if(r.delay<=0)delayBuckets['准班(≤0天)']++;else if(r.delay<=3)delayBuckets['1-3天']++;else if(r.delay<=7)delayBuckets['4-7天']++;else if(r.delay<=14)delayBuckets['8-14天']++;else if(r.delay<=30)delayBuckets['15-30天']++;else delayBuckets['>30天']++;});
+  var totalArrived=arrived.filter(function(r){return r.delay!==null;}).length;
+  makeChart('chartDelayDist',{type:'bar',data:{labels:Object.keys(delayBuckets),datasets:[{label:'柜量',data:Object.values(delayBuckets),backgroundColor:['#10b981','#84cc16','#facc15','#f59e0b','#f97316','#ef4444']}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){var count=ctx.parsed.y;var pct=totalArrived>0?(count/totalArrived*100).toFixed(1):0;return '柜量: '+count+' ('+pct+'%)';}}}},scales:{y:{title:{display:true,text:'柜量'}}}}});
+
+  var marketArrived=groupBy(arrived,function(r){return r.marketDisplay;});
+  var marketOnTime=groupBy(onTime,function(r){return r.marketDisplay;});
+  var marketRates=Object.entries(marketArrived).map(function(e){return{market:e[0],total:e[1].length,onTime:(marketOnTime[e[0]]||[]).length,rate:(marketOnTime[e[0]]||[]).length/e[1].length*100};}).sort(function(a,b){return b.total-a.total;}).slice(0,15);
+  makeChart('chartMarketOnTime',{type:'bar',data:{labels:marketRates.map(function(m){return m.market;}),datasets:[{label:'准班率(%)',data:marketRates.map(function(m){return m.rate.toFixed(1);}),backgroundColor:marketRates.map(function(m){return m.rate>=80?'#10b981':m.rate>=60?'#f59e0b':'#ef4444';})}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
+}
+
+function renderCarrier(){
+  var carrierData={};
+  filteredData.forEach(function(r){carrierData[r.carrier]=(carrierData[r.carrier]||0)+1;});
+  var carrierSorted=sortDesc(carrierData);
+  makeChart('chartCarrierVolume',{type:'bar',data:{labels:carrierSorted.map(function(c){return c[0]+(CARRIER_FULL[c[0]]?' ('+CARRIER_FULL[c[0]]+')':'');}),datasets:[{label:'柜量',data:carrierSorted.map(function(c){return c[1];}),backgroundColor:'#3b82f6'}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
+
+  var arrived=filteredData.filter(function(r){return r.status==='arrived'||r.status==='delayed';});
+  var onTime=filteredData.filter(function(r){return r.status==='arrived';});
+  var carrierArrived=groupBy(arrived,function(r){return r.carrier;});
+  var carrierOnTime=groupBy(onTime,function(r){return r.carrier;});
+  var carrierRates=Object.entries(carrierArrived).map(function(e){return{carrier:e[0],total:e[1].length,onTime:(carrierOnTime[e[0]]||[]).length,rate:(carrierOnTime[e[0]]||[]).length/e[1].length*100};}).filter(function(c){return c.total>=5;}).sort(function(a,b){return b.rate-a.rate;});
+  makeChart('chartCarrierOnTime',{type:'bar',data:{labels:carrierRates.map(function(c){return c.carrier+(CARRIER_FULL[c.carrier]?' ('+CARRIER_FULL[c.carrier]+')':'');}),datasets:[{label:'准班率(%)',data:carrierRates.map(function(c){return c.rate.toFixed(1);}),backgroundColor:carrierRates.map(function(c){return c.rate>=80?'#10b981':c.rate>=60?'#f59e0b':'#ef4444';})}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
+
+  var topCarriers=carrierSorted.slice(0,10).map(function(c){return c[0];});
+  var marketData={};
+  filteredData.forEach(function(r){marketData[r.finalDest]=(marketData[r.finalDest]||0)+1;});
+  var topMarkets=sortDesc(marketData).slice(0,8).map(function(m){return m[0];});
+  var datasets=topCarriers.map(function(c,i){return{label:c,data:topMarkets.map(function(m){return filteredData.filter(function(r){return r.carrier===c&&r.finalDest===m;}).length;}),backgroundColor:CHART_COLORS[i%CHART_COLORS.length]};});
+  makeChart('chartCarrierMarket',{type:'bar',data:{labels:topMarkets.map(function(m){return m+' '+(COUNTRY_CN[m]||m);}),datasets:datasets},options:{plugins:{legend:{position:'top'}},scales:{x:{stacked:true},y:{stacked:true}}}});
+}
+
+function renderVolume(){
+  var marketData={};
+  filteredData.forEach(function(r){marketData[r.marketDisplay]=(marketData[r.marketDisplay]||0)+1;});
+  var topMarkets=sortDesc(marketData).slice(0,10).map(function(m){return m[0];});
+  var weekData=groupBy(filteredData,function(r){return r.week||'未知';});
+  var weekKeys=Object.keys(weekData).sort();
+  var datasets=topMarkets.map(function(m,i){return{label:m,data:weekKeys.map(function(w){return weekData[w].filter(function(r){return r.marketDisplay===m;}).length;}),borderColor:CHART_COLORS[i%CHART_COLORS.length],backgroundColor:CHART_COLORS[i%CHART_COLORS.length]+'20',tension:0.3};});
+  makeChart('chartWeeklyVolumeByMarket',{type:'line',data:{labels:weekKeys,datasets:datasets},options:{scales:{x:{ticks:{maxRotation:45}}},plugins:{legend:{position:'top'}}}});
+
+  var polData={};
+  filteredData.forEach(function(r){polData[r.pol]=(polData[r.pol]||0)+1;});
+  makeChart('chartPOLVolume',{type:'bar',data:{labels:sortDesc(polData).map(function(p){return p[0];}),datasets:[{label:'柜量',data:sortDesc(polData).map(function(p){return p[1];}),backgroundColor:'#3b82f6'}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
+
+  var marketSorted=sortDesc(marketData).slice(0,20);
+  makeChart('chartMarketVolume',{type:'bar',data:{labels:marketSorted.map(function(m){return m[0];}),datasets:[{label:'柜量',data:marketSorted.map(function(m){return m[1];}),backgroundColor:'#3b82f6'}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
+}
+
+function renderCntrSize(){
+  var sizeData={};
+  filteredData.forEach(function(r){var s=r.cntrSize||'(未填)';sizeData[s]=(sizeData[s]||0)+1;});
+  var sizeSorted=sortDesc(sizeData);
+  var total=filteredData.length;
+
+  document.getElementById('cntrSizeMetrics').innerHTML=sizeSorted.map(function(s){
+    var pct=total>0?(s[1]/total*100).toFixed(1):0;
+    return '<div class="metric-card"><div class="metric-label">'+s[0]+'</div><div class="metric-value">'+s[1]+'</div><div class="metric-sub">占比 '+pct+'%</div></div>';
+  }).join('');
+
+  makeChart('chartCntrSizeDist',{type:'doughnut',data:{labels:sizeSorted.map(function(s){return s[0];}),datasets:[{data:sizeSorted.map(function(s){return s[1];}),backgroundColor:CHART_COLORS}]},options:{plugins:{legend:{position:'right'}}}});
+
+  var topMarkets=sortDesc(filteredData.reduce(function(m,r){m[r.marketDisplay]=(m[r.marketDisplay]||0)+1;return m;},{})).slice(0,10).map(function(m){return m[0];});
+  var sizes=sizeSorted.map(function(s){return s[0];});
+  var datasets=sizes.map(function(s,i){return{label:s,data:topMarkets.map(function(m){return filteredData.filter(function(r){return (r.cntrSize||'(未填)')===s&&r.marketDisplay===m;}).length;}),backgroundColor:CHART_COLORS[i%CHART_COLORS.length]};});
+  makeChart('chartCntrSizeMarket',{type:'bar',data:{labels:topMarkets,datasets:datasets},options:{plugins:{legend:{position:'top'}},scales:{x:{stacked:true},y:{stacked:true}}}});
+
+  var weekData=groupBy(filteredData,function(r){return r.week||'未知';});
+  var weekKeys=Object.keys(weekData).sort();
+  var datasets2=sizes.map(function(s,i){return{label:s,data:weekKeys.map(function(w){return weekData[w].filter(function(r){return (r.cntrSize||'(未填)')===s;}).length;}),borderColor:CHART_COLORS[i%CHART_COLORS.length],backgroundColor:CHART_COLORS[i%CHART_COLORS.length]+'20',tension:0.3};});
+  makeChart('chartCntrSizeWeekly',{type:'line',data:{labels:weekKeys,datasets:datasets2},options:{scales:{x:{ticks:{maxRotation:45}}},plugins:{legend:{position:'top'}}}});
+}
+
+function renderTransit(){
+  var arrived=filteredData.filter(function(r){return r.actualTransit!==null;});
+  var transits=arrived.map(function(r){return r.actualTransit;});
+  var avg=transits.length>0?(transits.reduce(function(a,b){return a+b;},0)/transits.length).toFixed(1):'0';
+  var sorted=transits.slice().sort(function(a,b){return a-b;});
+  var median=sorted.length>0?(sorted.length%2===0?((sorted[sorted.length/2-1]+sorted[sorted.length/2])/2):sorted[Math.floor(sorted.length/2)]).toFixed(1):'0';
+  var min=sorted.length>0?sorted[0]:0;
+  var max=sorted.length>0?sorted[sorted.length-1]:0;
+
+  document.getElementById('transitMetrics').innerHTML=
+    '<div class="metric-card"><div class="metric-label">已到港(可计算海运时间)</div><div class="metric-value">'+arrived.length+'</div></div>'+
+    '<div class="metric-card"><div class="metric-label">平均海运时间</div><div class="metric-value">'+avg+'</div><div class="metric-sub">天</div></div>'+
+    '<div class="metric-card"><div class="metric-label">中位海运时间</div><div class="metric-value">'+median+'</div><div class="metric-sub">天</div></div>'+
+    '<div class="metric-card"><div class="metric-label">范围</div><div class="metric-value">'+min+' ~ '+max+'</div><div class="metric-sub">天</div></div>';
+
+  var marketTransit=groupBy(arrived,function(r){return r.marketDisplay;});
+  var marketStats=Object.entries(marketTransit).map(function(e){var ts=e[1].map(function(r){return r.actualTransit;}).filter(function(t){return t!==null;});var s=ts.slice().sort(function(a,b){return a-b;});var avg=ts.length>0?ts.reduce(function(a,b){return a+b;},0)/ts.length:0;var med=s.length>0?(s.length%2===0?(s[s.length/2-1]+s[s.length/2])/2:s[Math.floor(s.length/2)]):0;return{market:e[0],count:e[1].length,avg:avg,median:med};}).filter(function(m){return m.count>=3;}).sort(function(a,b){return b.avg-a.avg;});
+  makeChart('chartTransitByMarket',{type:'bar',data:{labels:marketStats.map(function(m){return m.market+' ('+m.count+')';}),datasets:[{label:'平均(天)',data:marketStats.map(function(m){return m.avg.toFixed(1);}),backgroundColor:'#3b82f6'},{label:'中位数(天)',data:marketStats.map(function(m){return m.median.toFixed(1);}),backgroundColor:'#10b981'}]},options:{plugins:{legend:{position:'top'}}}});
+
+  var buckets={'≤15天':0,'16-20天':0,'21-25天':0,'26-30天':0,'31-35天':0,'36-40天':0,'41-50天':0,'>50天':0};
+  transits.forEach(function(t){if(t<=15)buckets['≤15天']++;else if(t<=20)buckets['16-20天']++;else if(t<=25)buckets['21-25天']++;else if(t<=30)buckets['26-30天']++;else if(t<=35)buckets['31-35天']++;else if(t<=40)buckets['36-40天']++;else if(t<=50)buckets['41-50天']++;else buckets['>50天']++;});
+  makeChart('chartTransitDist',{type:'bar',data:{labels:Object.keys(buckets),datasets:[{label:'柜量',data:Object.values(buckets),backgroundColor:'#3b82f6'}]},options:{plugins:{legend:{display:false}}}});
+
+  var carrierTransit=groupBy(arrived,function(r){return r.carrier;});
+  var carrierStats=Object.entries(carrierTransit).map(function(e){var ts=e[1].map(function(r){return r.actualTransit;}).filter(function(t){return t!==null;});return{carrier:e[0],count:e[1].length,avg:ts.length>0?ts.reduce(function(a,b){return a+b;},0)/ts.length:0};}).filter(function(c){return c.count>=5;}).sort(function(a,b){return a.avg-b.avg;});
+  makeChart('chartTransitByCarrier',{type:'bar',data:{labels:carrierStats.map(function(c){return c.carrier+(CARRIER_FULL[c.carrier]?' ('+CARRIER_FULL[c.carrier]+')':'')+' ('+c.count+')';}),datasets:[{label:'平均海运时间(天)',data:carrierStats.map(function(c){return c.avg.toFixed(1);}),backgroundColor:'#3b82f6'}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
+}
+
+// ============================================================
+// DELAY ANALYSIS (by carrier, not by vessel/route)
+// ============================================================
+var carrierDelayData=[];
+var carrierSortKey='avgDelay';
+var carrierSortDesc=true;
+
+function renderDelay(){
+  var arrived=filteredData.filter(function(r){return r.delay!==null;});
+
+  // Group by carrier
+  var carrierGroups=groupBy(arrived,function(r){return r.carrier;});
+
+  carrierDelayData=[];
+  for(var carrier in carrierGroups){
+    var items=carrierGroups[carrier];
+    var delays=items.map(function(r){return r.delay;});
+    var onTime=delays.filter(function(d){return d<=0;}).length;
+    var delayedCount=delays.filter(function(d){return d>0;}).length;
+    var avg=delays.reduce(function(a,b){return a+b;},0)/delays.length;
+    var maxD=Math.max.apply(null,delays);
+    var minD=Math.min.apply(null,delays);
+
+    // Total containers for this carrier (not just arrived)
+    var totalForCarrier=filteredData.filter(function(r){return r.carrier===carrier;}).length;
+
+    // Delay buckets
+    var b={'0':0,'1-3':0,'4-7':0,'8-14':0,'15-30':0,'>30':0};
+    delays.forEach(function(d){if(d<=0)b['0']++;else if(d<=3)b['1-3']++;else if(d<=7)b['4-7']++;else if(d<=14)b['8-14']++;else if(d<=30)b['15-30']++;else b['>30']++;});
+
+    carrierDelayData.push({
+      carrier:carrier,
+      total:totalForCarrier,
+      arrived:items.length,
+      delayed:delayedCount,
+      delayPct:totalForCarrier>0?(delayedCount/totalForCarrier*100):0,
+      avgDelay:avg,
+      onTimeRate:onTime/items.length*100,
+      maxDelay:maxD,
+      onTime:onTime,
+      delayBuckets:b
+    });
+  }
+
+  // Sort by avg delay descending
+  carrierDelayData.sort(function(a,b){return b.avgDelay-a.avgDelay;});
+
+  // Metric cards
+  var totalCarriers=carrierDelayData.length;
+  var allDelays=arrived.map(function(r){return r.delay;});
+  var avgAll=allDelays.length>0?allDelays.reduce(function(a,b){return a+b;},0)/allDelays.length:0;
+  var worst=carrierDelayData.length>0?carrierDelayData[0]:null;
+  var best=carrierDelayData.length>0?carrierDelayData[carrierDelayData.length-1]:null;
+
+  document.getElementById('delayMetrics').innerHTML=
+    '<div class="metric-card"><div class="metric-label">涉及的船公司总数</div><div class="metric-value">'+totalCarriers+'</div><div class="metric-sub">家</div></div>'+
+    '<div class="metric-card"><div class="metric-label">整体平均延误</div><div class="metric-value '+(avgAll<=2?'good':avgAll<=7?'warn':'bad')+'">'+avgAll.toFixed(1)+'</div><div class="metric-sub">天 (已到港 '+arrived.length+' 柜)</div></div>'+
+    '<div class="metric-card"><div class="metric-label">最延误船公司</div><div class="metric-value bad">'+(worst?worst.avgDelay.toFixed(1):'-')+'</div><div class="metric-sub">'+(worst?worst.carrier+(CARRIER_FULL[worst.carrier]?' ('+CARRIER_FULL[worst.carrier]+')':''):'-')+'</div></div>'+
+    '<div class="metric-card"><div class="metric-label">最佳准班船公司</div><div class="metric-value good">'+(best?best.avgDelay.toFixed(1):'-')+'</div><div class="metric-sub">'+(best?best.carrier+(CARRIER_FULL[best.carrier]?' ('+CARRIER_FULL[best.carrier]+')':''):'-')+'</div></div>';
+
+  // Chart 1: Carrier delay ranking - bar (count) + line (delay %)
+  var sortedByDelay=carrierDelayData.slice().sort(function(a,b){return b.avgDelay-a.avgDelay;});
+  makeChart('chartCarrierDelayRank',{
+    type:'bar',
+    data:{
+      labels:sortedByDelay.map(function(c){return c.carrier+(CARRIER_FULL[c.carrier]?' ('+CARRIER_FULL[c.carrier]+')':'');}),
+      datasets:[
+        {label:'柜量',data:sortedByDelay.map(function(c){return c.total;}),backgroundColor:'#3b82f6',yAxisID:'y',order:2},
+        {type:'line',label:'延误柜占比(%)',data:sortedByDelay.map(function(c){return c.delayPct.toFixed(1);}),borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,0.1)',yAxisID:'y1',order:1,tension:0.1,pointRadius:4}
+      ]
+    },
+    options:{
+      plugins:{legend:{position:'top'},tooltip:{callbacks:{afterLabel:function(ctx){if(ctx.datasetIndex===0){var c=sortedByDelay[ctx.dataIndex];return '已到港: '+c.arrived+' | 延误: '+c.delayed+' | 准班率: '+c.onTimeRate.toFixed(0)+'%';}}}}},
+      scales:{
+        y:{type:'linear',position:'left',title:{display:true,text:'柜量'}},
+        y1:{type:'linear',position:'right',title:{display:true,text:'延误柜占比 (%)'},grid:{drawOnChartArea:false}},
+        x:{ticks:{maxRotation:45}}
+      }
+    }
+  });
+
+  // Chart 2: Carrier on-time rate (descending, all carriers)
+  var sortedByOnTime=carrierDelayData.slice().sort(function(a,b){return b.onTimeRate-a.onTimeRate;});
+  makeChart('chartCarrierOnTimeRank',{
+    type:'bar',
+    data:{
+      labels:sortedByOnTime.map(function(c){return c.carrier+(CARRIER_FULL[c.carrier]?' ('+CARRIER_FULL[c.carrier]+')':'');}),
+      datasets:[{
+        label:'准班率(%)',
+        data:sortedByOnTime.map(function(c){return c.onTimeRate.toFixed(1);}),
+        backgroundColor:sortedByOnTime.map(function(c){return c.onTimeRate>=60?'#10b981':c.onTimeRate>=40?'#f59e0b':'#ef4444';})
+      }]
+    },
+    options:{
+      indexAxis:'y',
+      plugins:{legend:{display:false},tooltip:{callbacks:{afterLabel:function(ctx){var c=sortedByOnTime[ctx.dataIndex];return '平均延误: '+c.avgDelay.toFixed(1)+'天 | 柜量: '+c.total+' | 延误: '+c.delayed;}}}},
+      scales:{x:{title:{display:true,text:'准班率 (%)'},min:0,max:100}}
+    }
+  });
+
+  // Chart 3: Carrier weekly average delay (line chart, one line per carrier)
+  var weekData=groupBy(arrived,function(r){return r.week||'未知';});
+  var weekKeys=Object.keys(weekData).sort();
+  var carriers=Object.keys(carrierGroups).sort();
+
+  var datasets=carriers.map(function(c,i){
+    return{
+      label:c+(CARRIER_FULL[c]?' ('+CARRIER_FULL[c]+')':''),
+      data:weekKeys.map(function(w){
+        var wCarrierItems=weekData[w].filter(function(r){return r.carrier===c;});
+        if(wCarrierItems.length===0) return null;
+        var d=wCarrierItems.map(function(r){return r.delay;});
+        return Math.round(d.reduce(function(a,b){return a+b;},0)/d.length*10)/10;
+      }),
+      borderColor:CHART_COLORS[i%CHART_COLORS.length],
+      backgroundColor:CHART_COLORS[i%CHART_COLORS.length]+'20',
+      tension:0.3,
+      spanGaps:true
+    };
+  });
+
+  makeChart('chartCarrierWeeklyDelay',{
+    type:'line',
+    data:{labels:weekKeys,datasets:datasets},
+    options:{
+      scales:{x:{ticks:{maxRotation:45}},y:{title:{display:true,text:'平均延误天数'}}},
+      plugins:{legend:{position:'top'}}
+    }
+  });
+
+  // Render table
+  renderCarrierDelayTable();
+}
+
+function renderCarrierDelayTable(){
+  var sorted=carrierDelayData.slice();
+  sorted.sort(function(a,b){
+    var va=a[carrierSortKey],vb=b[carrierSortKey];
+    if(typeof va==='string'){
+      return carrierSortDesc?vb.localeCompare(va):va.localeCompare(vb);
+    }
+    if(carrierSortKey==='delayBuckets'){
+      va=a.delayBuckets['>30']+a.delayBuckets['15-30'];
+      vb=b.delayBuckets['>30']+b.delayBuckets['15-30'];
+    }
+    return carrierSortDesc?vb-va:va-vb;
+  });
+
+  document.getElementById('carrierDelayBody').innerHTML=sorted.map(function(r){
+    var delayCls=r.avgDelay>7?'bad':r.avgDelay>3?'warn':'good';
+    var rateCls=r.onTimeRate>=60?'good':r.onTimeRate>=30?'warn':'bad';
+    var pctCls=r.delayPct>=60?'bad':r.delayPct>=30?'warn':'good';
+    var b=r.delayBuckets;
+    var bucketStr='<span style="color:#10b981">0天:'+b['0']+'</span> <span style="color:#f59e0b">1-3:'+b['1-3']+'</span> <span style="color:#f97316">4-7:'+b['4-7']+'</span> <span style="color:#ef4444">8-14:'+b['8-14']+'</span> <span style="color:#dc2626">15-30:'+b['15-30']+'</span> <span style="color:#991b1b">&gt;30:'+b['>30']+'</span>';
+    return '<tr>'+
+      '<td style="font-weight:500;">'+r.carrier+(CARRIER_FULL[r.carrier]?' ('+CARRIER_FULL[r.carrier]+')':'')+'</td>'+
+      '<td class="num">'+r.total+'</td>'+
+      '<td class="num">'+r.arrived+'</td>'+
+      '<td class="num">'+r.delayed+'</td>'+
+      '<td class="num '+pctCls+'" style="font-weight:600;">'+r.delayPct.toFixed(1)+'%</td>'+
+      '<td class="num '+delayCls+'" style="font-weight:600;">'+r.avgDelay.toFixed(1)+'</td>'+
+      '<td class="num '+rateCls+'" style="font-weight:600;">'+r.onTimeRate.toFixed(0)+'%</td>'+
+      '<td class="num">'+(r.maxDelay>0?'<span style="color:#ef4444;">+'+r.maxDelay+'</span>':r.maxDelay)+'</td>'+
+      '<td style="font-size:11px;white-space:nowrap;">'+bucketStr+'</td>'+
+      '</tr>';
+  }).join('');
+}
+
+function sortCarrierDelay(key){
+  if(carrierSortKey===key){carrierSortDesc=!carrierSortDesc;}else{carrierSortKey=key;carrierSortDesc=true;}
+  renderCarrierDelayTable();
+}
+
+// ============================================================
+// TABLE
+// ============================================================
+function renderTable(){
+  var cols=[
+    {key:'bkg',label:'提单号'},{key:'cntr',label:'柜号'},{key:'carrier',label:'船公司'},
+    {key:'cntrSize',label:'箱型'},{key:'vessel',label:'一程船名/航次'},{key:'pol',label:'出发港'},
+    {key:'marketDisplay',label:'目的国'},{key:'pod',label:'目的港'},{key:'continentCN',label:'航区'},
+    {key:'week',label:'ETD周'},{key:'polEtd',label:'POL ETD'},{key:'polAtd',label:'POL ATD'},
+    {key:'origEta',label:'原始ETA'},{key:'updEta',label:'最新ETA'},{key:'ata',label:'ATA'},
+    {key:'delay',label:'延误(天)'},{key:'origTransit',label:'原始航程(天)'},{key:'actualTransit',label:'实际航程(天)'},
+    {key:'transStatus',label:'运输状态'},{key:'statusText',label:'准班状态'}
+  ];
+  document.getElementById('tableHead').innerHTML='<tr>'+cols.map(function(c){return'<th>'+c.label+'</th>';}).join('')+'</tr>';
+
+  var search=document.getElementById('tableSearch').value.toLowerCase();
+  var display=search?filteredData.filter(function(r){return r.bkg.toLowerCase().indexOf(search)>=0||r.cntr.toLowerCase().indexOf(search)>=0||r.carrier.toLowerCase().indexOf(search)>=0||r.vessel.toLowerCase().indexOf(search)>=0;}):filteredData;
+  document.getElementById('tableCount').textContent='明细数据 ('+display.length+' / '+filteredData.length+')';
+  document.getElementById('tableBody').innerHTML=display.slice(0,1000).map(function(r){
+    return'<tr>'+cols.map(function(c){
+      var val=r[c.key];
+      if(c.key==='statusText'){var cls=r.status==='arrived'?'status-arrived':r.status==='delayed'?'status-delayed':'status-transit';return'<td><span class="status-badge '+cls+'">'+val+'</span></td>';}
+      if(c.key==='delay'&&val!==null&&val>0)return'<td class="num" style="color:#ef4444;font-weight:500;">'+val+'</td>';
+      return'<td class="'+(typeof val==='number'?'num':'')+'">'+(val===null||val===''?'-':val)+'</td>';
+    }).join('')+'</tr>';
+  }).join('');
+}
+document.getElementById('tableSearch').addEventListener('input',renderTable);
+
+// ============================================================
+// TABS
+// ============================================================
+document.querySelectorAll('.tab').forEach(function(tab){
+  tab.addEventListener('click',function(){
+    document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
+    document.querySelectorAll('.tab-content').forEach(function(c){c.classList.remove('active');});
+    tab.classList.add('active');
+    document.getElementById('tab-'+tab.dataset.tab).classList.add('active');
+    setTimeout(function(){Object.values(charts).forEach(function(c){if(c)c.resize();});},50);
+  });
+});
+
+// ============================================================
+// START
+// ============================================================
+init();
+</script>
+</body>
+</html>
