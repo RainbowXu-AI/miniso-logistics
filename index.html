@@ -4,8 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>物流追踪数据分析看板</title>
-<script src="xlsx.full.min.js"></script>
-<script src="chart.umd.js"></script>
 <style>
 :root{--bg-primary:#fff;--bg-secondary:#f7f8fa;--bg-tertiary:#eef0f3;--text-primary:#1a1a2e;--text-secondary:#6b7280;--text-tertiary:#9ca3af;--border:#e5e7eb;--border-strong:#d1d5db;--accent:#3b82f6;--accent-light:#dbeafe;--success:#10b981;--success-light:#d1fae5;--warning:#f59e0b;--warning-light:#fef3c7;--danger:#ef4444;--danger-light:#fee2e2;--radius:8px;--radius-lg:12px}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -270,24 +268,80 @@ var rawData=[], filteredData=[], charts={};
 var msInstances={};
 
 // ============================================================
-// INIT - try fetch JSON first, fallback to upload
+// DYNAMIC SCRIPT LOADING
+// ============================================================
+var xlsxLoaded=false;
+function loadScript(src,onLoad,onError){
+  var s=document.createElement('script');
+  s.src=src;
+  s.onload=onLoad;
+  s.onerror=onError||function(){console.error('Failed to load:',src);};
+  document.head.appendChild(s);
+}
+function loadXLSX(callback){
+  if(xlsxLoaded||typeof XLSX!=='undefined'){callback();return;}
+  showLoading('正在加载Excel解析库...');
+  loadScript('xlsx.full.min.js',function(){xlsxLoaded=true;callback();},function(){
+    hideLoading();
+    showUploadMsg('Excel解析库加载失败，请刷新页面重试。','error');
+  });
+}
+
+// ============================================================
+// INIT - load chart.js first, then fetch JSON
 // ============================================================
 function init(){
-  showLoading('正在加载数据...');
-  var loadingTimeout=setTimeout(function(){
+  showLoading('正在加载图表库...');
+  var scriptTimeout=setTimeout(function(){
     hideLoading();
     showUploadView();
-    showUploadMsg('数据加载超时，可能是网络较慢。请直接上传Excel文件查看数据，或稍后刷新重试。', 'error');
-  },30000);
-  fetch('logistics_data.json?_t='+Date.now())
+    showUploadMsg('页面资源加载超时（可能是网络较慢）。<br>你可以直接上传Excel文件查看数据，或稍后刷新重试。','error');
+  },15000);
+
+  // Step 1: Load Chart.js dynamically
+  loadScript('chart.umd.js',function(){
+    clearTimeout(scriptTimeout);
+    console.log('Chart.js loaded');
+    fetchData();
+  },function(){
+    clearTimeout(scriptTimeout);
+    console.error('Chart.js failed to load');
+    hideLoading();
+    showUploadView();
+    showUploadMsg('图表库加载失败，请检查网络后刷新重试。','error');
+  });
+}
+
+function fetchData(){
+  showLoading('正在加载数据...');
+  var dataTimeout=setTimeout(function(){
+    hideLoading();
+    showUploadView();
+    showUploadMsg('数据加载超时，可能是网络较慢。<br>请直接上传Excel文件查看数据，或稍后刷新重试。','error');
+  },20000);
+
+  fetch('logistics_data_compact.json?_t='+Date.now())
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(function(data){
-      clearTimeout(loadingTimeout);
-      console.log('JSON loaded:', data.length, 'records');
-      rawData=data; showDashboard();
+    .then(function(compact){
+      clearTimeout(dataTimeout);
+      console.log('Compact JSON loaded:', compact.d.length, 'records');
+      // Convert compact format to object array
+      var fields=compact.h;
+      rawData=compact.d.map(function(row){
+        var obj={};
+        for(var i=0;i<fields.length;i++) obj[fields[i]]=row[i];
+        return obj;
+      });
+      // Rebuild derived fields
+      rawData.forEach(function(r){
+        r.countryCN=COUNTRY_CN[r.finalDest]||r.finalDest;
+        r.marketDisplay=r.finalDest+' '+r.countryCN;
+      });
+      console.log('Processed:', rawData.length, 'records');
+      showDashboard();
     })
     .catch(function(err){
-      clearTimeout(loadingTimeout);
+      clearTimeout(dataTimeout);
       console.log('JSON fetch failed:', err.message);
       showUploadView();
     });
@@ -307,11 +361,14 @@ function saveToGitHub(token){
   indicator.className='save-indicator show loading';
   indicator.innerHTML='<div class="spinner"></div>正在同步数据到GitHub...';
 
-  var jsonStr=JSON.stringify(rawData);
+  // Convert to compact format for saving
+  var saveFields=['bkg','cntr','carrier','cntrSize','vessel','pol','pod','finalDest','continents','continentCN','transStatus','polEtd','polAtd','origEta','updEta','ata','delay','origTransit','actualTransit','status','statusText','week'];
+  var compactData={h:saveFields,d:rawData.map(function(r){return saveFields.map(function(f){var v=r[f];return v===null?'':v;});})};
+  var jsonStr=JSON.stringify(compactData);
   var content=btoa(unescape(encodeURIComponent(jsonStr)));
 
   // First, get the current file SHA (if exists) for update
-  fetch('https://api.github.com/repos/RainbowXu-AI/miniso-logistics/contents/logistics_data.json', {
+  fetch('https://api.github.com/repos/RainbowXu-AI/miniso-logistics/contents/logistics_data_compact.json', {
     method:'GET',
     headers:{'Authorization':'token '+token,'Accept':'application/vnd.github.v3+json'}
   })
@@ -324,7 +381,7 @@ function saveToGitHub(token){
     };
     if(data && data.sha) body.sha=data.sha;
 
-    return fetch('https://api.github.com/repos/RainbowXu-AI/miniso-logistics/contents/logistics_data.json',{
+    return fetch('https://api.github.com/repos/RainbowXu-AI/miniso-logistics/contents/logistics_data_compact.json',{
       method:'PUT',
       headers:{
         'Authorization':'token '+token,
@@ -446,37 +503,37 @@ function showUploadMsg(msg, type){
 
 function handleFile(file){
   console.log('File selected:', file.name, file.size, 'bytes', file.type);
-  showLoading('正在解析文件: '+file.name);
-
-  if(typeof XLSX==='undefined'){
-    hideLoading();
-    showUploadMsg('错误: xlsx 库未加载！请刷新页面重试。', 'error');
-    return;
-  }
-
-  var reader=new FileReader();
-  reader.onload=function(e){
-    try{
-      var wb=XLSX.read(e.target.result, {type:'array', cellDates:false});
-      var ws=wb.Sheets[wb.SheetNames[0]];
-      var rows=XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-      if(rows.length<2){
-        hideLoading();
-        showUploadMsg('文件无数据或少于2行，请检查文件内容。', 'error');
-        return;
-      }
-      processData(rows);
-    }catch(err){
-      console.error('Parse error:', err);
+  loadXLSX(function(){
+    showLoading('正在解析文件: '+file.name);
+    if(typeof XLSX==='undefined'){
       hideLoading();
-      showUploadMsg('文件解析失败: '+err.message, 'error');
+      showUploadMsg('错误: xlsx 库未加载！请刷新页面重试。', 'error');
+      return;
     }
-  };
-  reader.onerror=function(){
-    hideLoading();
-    showUploadMsg('文件读取失败，请重试。', 'error');
-  };
-  reader.readAsArrayBuffer(file);
+    var reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        var wb=XLSX.read(e.target.result, {type:'array', cellDates:false});
+        var ws=wb.Sheets[wb.SheetNames[0]];
+        var rows=XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+        if(rows.length<2){
+          hideLoading();
+          showUploadMsg('文件无数据或少于2行，请检查文件内容。', 'error');
+          return;
+        }
+        processData(rows);
+      }catch(err){
+        console.error('Parse error:', err);
+        hideLoading();
+        showUploadMsg('文件解析失败: '+err.message, 'error');
+      }
+    };
+    reader.onerror=function(){
+      hideLoading();
+      showUploadMsg('文件读取失败，请重试。', 'error');
+    };
+    reader.readAsArrayBuffer(file);
+  });
 }
 
 // ============================================================
