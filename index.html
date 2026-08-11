@@ -93,9 +93,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 .save-indicator.loading{border-color:var(--accent);color:var(--accent)}
 .spinner{width:14px;height:14px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.floating-settings{position:fixed;top:16px;right:16px;width:40px;height:40px;border-radius:50%;background:var(--bg-primary);border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.12);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;z-index:8000;transition:all .2s}
+.floating-settings:hover{box-shadow:0 4px 16px rgba(0,0,0,.18);transform:scale(1.05)}
 </style>
 </head>
 <body>
+
+<!-- Floating Settings Button (always visible) -->
+<button class="floating-settings" id="floatSettingsBtn" title="设置GitHub Token">&#9881;</button>
 
 <div id="loadingOverlay" class="loading-overlay">
   <div class="spinner"></div>
@@ -477,6 +482,11 @@ fileInput2.addEventListener('change', function(e){
 
 // Settings modal
 document.getElementById('settingsBtn').addEventListener('click', function(){
+  document.getElementById('settingsModal').style.display='flex';
+  var existing=localStorage.getItem('gh_token')||'';
+  document.getElementById('tokenInput').value=existing;
+});
+document.getElementById('floatSettingsBtn').addEventListener('click', function(){
   document.getElementById('settingsModal').style.display='flex';
   var existing=localStorage.getItem('gh_token')||'';
   document.getElementById('tokenInput').value=existing;
