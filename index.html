@@ -81,6 +81,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 .error-box{background:var(--danger-light);border:1px solid var(--danger);border-radius:var(--radius);padding:12px 16px;margin:12px 0;max-width:560px;font-size:13px;color:#991b1b;word-break:break-all;width:100%}
 .success-box{background:var(--success-light);border:1px solid var(--success);border-radius:var(--radius);padding:12px 16px;margin:12px 0;max-width:560px;font-size:13px;color:#065f46;width:100%}
 @media(max-width:900px){.chart-grid{grid-template-columns:1fr}.filters{flex-direction:column;align-items:flex-start}}
+.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:9999}
+.modal-box{background:var(--bg-primary);border-radius:var(--radius-lg);padding:28px;max-width:440px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.2)}
+.modal-box h3{font-size:16px;margin-bottom:16px}
+.modal-box p{font-size:13px;color:var(--text-secondary);margin-bottom:12px;line-height:1.5}
+.modal-box input{width:100%;padding:8px 12px;border:1px solid var(--border-strong);border-radius:6px;font-size:13px;margin-bottom:16px;font-family:monospace}
+.modal-box input:focus{outline:none;border-color:var(--accent)}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end}
+.save-indicator{position:fixed;top:60px;right:24px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;font-size:13px;box-shadow:0 2px 12px rgba(0,0,0,.1);z-index:5000;display:none;align-items:center;gap:8px}
+.save-indicator.show{display:flex}
+.save-indicator.success{border-color:var(--success);color:var(--success)}
+.save-indicator.error{border-color:var(--danger);color:var(--danger)}
+.save-indicator.loading{border-color:var(--accent);color:var(--accent)}
+.spinner{width:14px;height:14px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -113,7 +127,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
     </div>
     <div style="display:flex;gap:8px;">
       <button class="btn" id="refreshDataBtn" title="从服务器刷新最新数据">刷新数据</button>
-      <button class="btn btn-primary" id="uploadNewBtn">上传新报表</button>
+      <button class="btn" id="uploadNewBtn">上传新报表</button>
+      <button class="btn" id="settingsBtn" title="设置GitHub Token">&#9881;</button>
       <input type="file" id="fileInput2" accept=".xls,.xlsx" style="display:none;">
     </div>
   </div>
@@ -272,7 +287,62 @@ function init(){
 }
 
 function saveDataToServer(){
-  console.log('GitHub Pages mode: data saved locally only');
+  var token=localStorage.getItem('gh_token');
+  if(!token || !rawData.length){
+    console.log('No token or no data, skipping save');
+    return;
+  }
+  saveToGitHub(token);
+}
+
+function saveToGitHub(token){
+  var indicator=document.getElementById('saveIndicator');
+  indicator.className='save-indicator show loading';
+  indicator.innerHTML='<div class="spinner"></div>正在同步数据到GitHub...';
+
+  var jsonStr=JSON.stringify(rawData);
+  var content=btoa(unescape(encodeURIComponent(jsonStr)));
+
+  // First, get the current file SHA (if exists) for update
+  fetch('https://api.github.com/repos/RainbowXu-AI/miniso-logistics/contents/logistics_data.json', {
+    method:'GET',
+    headers:{'Authorization':'token '+token,'Accept':'application/vnd.github.v3+json'}
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    var body={
+      message:'Update logistics data - '+new Date().toLocaleString('zh-CN'),
+      content:content,
+      branch:'main'
+    };
+    if(data && data.sha) body.sha=data.sha;
+
+    return fetch('https://api.github.com/repos/RainbowXu-AI/miniso-logistics/contents/logistics_data.json',{
+      method:'PUT',
+      headers:{
+        'Authorization':'token '+token,
+        'Accept':'application/vnd.github.v3+json',
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify(body)
+    });
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data.commit){
+      indicator.className='save-indicator show success';
+      indicator.innerHTML='&#10003; 数据已同步！所有人刷新即可看到最新数据';
+      setTimeout(function(){ indicator.className='save-indicator'; },5000);
+    }else{
+      throw new Error(data.message||'Unknown error');
+    }
+  })
+  .catch(function(err){
+    console.error('Save to GitHub failed:',err);
+    indicator.className='save-indicator show error';
+    indicator.innerHTML='&#10007; 同步失败: '+err.message;
+    setTimeout(function(){ indicator.className='save-indicator'; },8000);
+  });
 }
 
 function showLoading(msg){
@@ -339,6 +409,26 @@ fileInput2.addEventListener('change', function(e){
     handleFile(e.target.files[0]);
   }
   e.target.value='';
+});
+
+// Settings modal
+document.getElementById('settingsBtn').addEventListener('click', function(){
+  document.getElementById('settingsModal').style.display='flex';
+  var existing=localStorage.getItem('gh_token')||'';
+  document.getElementById('tokenInput').value=existing;
+});
+document.getElementById('cancelSettingsBtn').addEventListener('click', function(){
+  document.getElementById('settingsModal').style.display='none';
+});
+document.getElementById('saveSettingsBtn').addEventListener('click', function(){
+  var token=document.getElementById('tokenInput').value.trim();
+  if(token){
+    localStorage.setItem('gh_token',token);
+    document.getElementById('settingsModal').style.display='none';
+    alert('Token已保存！上传新报表时将自动同步到GitHub。');
+  }else{
+    alert('请输入有效的Token');
+  }
 });
 
 function showUploadMsg(msg, type){
@@ -1058,5 +1148,21 @@ document.querySelectorAll('.tab').forEach(function(tab){
 // ============================================================
 init();
 </script>
+<!-- Save Indicator -->
+<div class="save-indicator" id="saveIndicator"></div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal" style="display:none;">
+  <div class="modal-box">
+    <h3>GitHub 设置</h3>
+    <p>输入你的 GitHub Personal Access Token (需要 repo 权限)。<br>Token 仅保存在本地浏览器，不会泄露给他人。</p>
+    <input type="password" id="tokenInput" placeholder="ghp_xxxxxxxxxxxx">
+    <div class="modal-actions">
+      <button class="btn" id="cancelSettingsBtn">取消</button>
+      <button class="btn btn-primary" id="saveSettingsBtn">保存</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
